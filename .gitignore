@@ -1,0 +1,45 @@
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+client_secret*.json
+*.pem
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.*
+
+# Next.js build
+.next/
+out/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+
+# Build & Dist
+build/
+dist/
+*.egg-info/
+
+# Testing & Coverage
+coverage/
+.pytest_cache/
+*.tsbuildinfo
+
+# Logs & OS
+*.log
+logs/
+.DS_Store
+Thumbs.db
+
+# IDE & Tooling
+.idea/
+.vscode/
+.vercel
