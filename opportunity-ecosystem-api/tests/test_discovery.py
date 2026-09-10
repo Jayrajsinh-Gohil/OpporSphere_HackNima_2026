@@ -110,14 +110,19 @@ async def test_smart_search_structured_filter_success():
     }
 
     mock_supabase = MagicMock()
-    # Structured query execution chain
-    mock_supabase.table().select().eq().ilike().ilike().ilike().limit().execute.return_value = MagicMock(
-        data=[mock_row]
-    )
-    # Trust scores in bulk
-    mock_supabase.table().select().in_().execute.return_value = MagicMock(
-        data=[{"opportunity_id": str(opp_id), "score": 88}]
-    )
+    chain = MagicMock()
+    chain.select.return_value = chain
+    chain.eq.return_value = chain
+    chain.ilike.return_value = chain
+    chain.gte.return_value = chain
+    chain.lte.return_value = chain
+    chain.in_.return_value = chain
+    chain.limit.return_value = chain
+    chain.execute.side_effect = [
+        MagicMock(data=[mock_row]),
+        MagicMock(data=[{"opportunity_id": str(opp_id), "score": 88}]),
+    ]
+    mock_supabase.table.return_value = chain
 
     with patch("app.services.discovery.supabase_admin", mock_supabase):
         res = await smart_search(query, top_k=5)

@@ -418,10 +418,10 @@ async def _execute_structured_query(
     )
 
     if filters.domain:
-        query_builder = query_builder.ilike("domain", f"%{filters.domain}%")
+        query_builder = query_builder.eq("domain", filters.domain.lower())
 
     if filters.opportunity_type:
-        query_builder = query_builder.ilike("type", f"%{filters.opportunity_type}%")
+        query_builder = query_builder.eq("type", filters.opportunity_type.lower())
 
     if filters.location:
         query_builder = query_builder.ilike("location", f"%{filters.location}%")
@@ -554,6 +554,13 @@ async def _execute_semantic_search(
     scored: List[Tuple[float, Dict[str, Any]]] = []
     for opp in opps:
         emb = opp.get("embedding")
+        if emb:
+            if isinstance(emb, str):
+                try:
+                    import json
+                    emb = json.loads(emb) if emb.startswith("[") else [float(x.strip()) for x in emb.split(",") if x.strip()]
+                except Exception:
+                    emb = None
         if emb:
             sim = embedder.cosine_similarity(query_vector, emb)
             scored.append((float(sim), opp))
