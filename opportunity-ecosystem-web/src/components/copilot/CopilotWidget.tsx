@@ -62,6 +62,17 @@ export function CopilotWidget() {
       }
     }
     setSessionId(currentId);
+
+    const handleOpen = () => setIsOpen(true);
+    const handleToggle = () => setIsOpen((prev) => !prev);
+
+    window.addEventListener("open-copilot", handleOpen);
+    window.addEventListener("toggle-copilot", handleToggle);
+
+    return () => {
+      window.removeEventListener("open-copilot", handleOpen);
+      window.removeEventListener("toggle-copilot", handleToggle);
+    };
   }, []);
 
   // Auto-scroll on message updates

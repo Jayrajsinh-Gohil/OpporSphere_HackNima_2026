@@ -194,8 +194,13 @@ function DashboardContent() {
               </div>
             </Link>
 
-            <div className="group rounded-2xl border border-zinc-800 bg-zinc-900/30 p-6 hover:border-pink-500/40 transition">
-              <div className="h-10 w-10 rounded-xl bg-pink-500/10 border border-pink-500/20 text-pink-400 flex items-center justify-center mb-4">
+            <button
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent("open-copilot"));
+              }}
+              className="group rounded-2xl border border-zinc-800 bg-zinc-900/30 p-6 hover:border-pink-500/40 hover:bg-zinc-900/60 transition text-left cursor-pointer w-full"
+            >
+              <div className="h-10 w-10 rounded-xl bg-pink-500/10 border border-pink-500/20 text-pink-400 flex items-center justify-center mb-4 group-hover:scale-110 transition">
                 <Bot className="h-5 w-5" />
               </div>
               <h3 className="font-semibold text-white mb-1">Student Copilot</h3>
@@ -206,7 +211,7 @@ function DashboardContent() {
                 <span>Open Copilot</span>
                 <ArrowRight className="h-3.5 w-3.5" />
               </div>
-            </div>
+            </button>
           </div>
         </div>
       </main>
