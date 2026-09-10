@@ -8,12 +8,15 @@ Key exports:
 
 from __future__ import annotations
 
-from typing import Annotated
+import json
+import urllib.request
+from typing import Annotated, Any, Dict, List
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
+from jose.jwk import construct
 from loguru import logger
 
 from app.core.config import settings
@@ -23,42 +26,105 @@ from app.models.student import StudentProfile
 # ── Bearer scheme ──────────────────────────────────────────────────────────────
 _bearer = HTTPBearer(auto_error=True)
 
+# In-memory JWKS cache for asymmetric Supabase tokens (ES256/RS256)
+_JWKS_CACHE: Dict[str, Any] = {}
+
+
+def _get_supabase_jwks(force_refresh: bool = False) -> List[dict]:
+    """Fetch and cache public signing keys from Supabase project JWKS."""
+    global _JWKS_CACHE
+    if not _JWKS_CACHE.get("keys") or force_refresh:
+        if not settings.SUPABASE_URL:
+            return []
+        try:
+            jwks_url = f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1/.well-known/jwks.json"
+            headers = {"User-Agent": "OpporSphere-API/1.0"}
+            if settings.SUPABASE_ANON_KEY:
+                headers["apikey"] = settings.SUPABASE_ANON_KEY
+            req = urllib.request.Request(jwks_url, headers=headers)
+            with urllib.request.urlopen(req, timeout=5) as res:
+                _JWKS_CACHE = json.loads(res.read().decode())
+                logger.info(f"Loaded {len(_JWKS_CACHE.get('keys', []))} JWKS key(s) from Supabase.")
+        except Exception as exc:
+            logger.warning(f"Could not fetch Supabase JWKS from {settings.SUPABASE_URL}: {exc}")
+    return _JWKS_CACHE.get("keys", [])
+
 
 # ── Token verification ─────────────────────────────────────────────────────────
 
 def _decode_supabase_jwt(token: str) -> dict:
     """
-    Verify a Supabase-issued JWT using the project's JWT secret.
-
-    Supabase tokens:
-      - Algorithm : HS256
-      - Issuer    : https://<project-ref>.supabase.co/auth/v1
-      - Subject   : auth.users.id  (UUID string)
-      - email     : available in the token claims
-
-    The JWT secret is found in:
-      Supabase Dashboard → Settings → API → JWT Settings → JWT Secret
+    Verify a Supabase-issued JWT.
+    Supports:
+      1. Asymmetric algorithms (ES256, RS256, ES384, ES512) via Supabase project JWKS.
+      2. Symmetric algorithm (HS256) via SUPABASE_JWT_SECRET.
+      3. Authoritative verification fallback via Supabase GoTrue Auth API (get_user).
     """
-    if not settings.SUPABASE_JWT_SECRET:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="SUPABASE_JWT_SECRET is not configured on the server.",
-        )
     try:
-        payload = jwt.decode(
-            token,
-            settings.SUPABASE_JWT_SECRET,
-            algorithms=[settings.JWT_ALGORITHM],
-            options={"verify_aud": False},   # Supabase doesn't set 'aud' by default
-        )
-        return payload
-    except JWTError as exc:
-        logger.debug(f"JWT verification failed: {exc}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired authentication token.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        header = jwt.get_unverified_header(token)
+        alg = header.get("alg", "HS256")
+        kid = header.get("kid")
+    except Exception as exc:
+        logger.debug(f"Could not read JWT header: {exc}")
+        alg = "HS256"
+        kid = None
+
+    # 1. Asymmetric algorithms (ES256, RS256, ES384, ES512) using Supabase JWKS
+    if alg in ("ES256", "RS256", "ES384", "ES512"):
+        keys = _get_supabase_jwks()
+        target_keys = [k for k in keys if not kid or k.get("kid") == kid]
+        if not target_keys and keys:
+            keys = _get_supabase_jwks(force_refresh=True)
+            target_keys = [k for k in keys if not kid or k.get("kid") == kid] or keys
+
+        for key_dict in target_keys:
+            try:
+                parsed_key = construct(key_dict)
+                payload = jwt.decode(
+                    token,
+                    parsed_key,
+                    algorithms=[alg],
+                    options={"verify_aud": False},
+                )
+                return payload
+            except Exception as exc:
+                logger.debug(f"JWKS key decode attempt failed: {exc}")
+
+    # 2. Symmetric HS256 algorithm using SUPABASE_JWT_SECRET
+    if (alg == "HS256" or not alg) and settings.SUPABASE_JWT_SECRET:
+        try:
+            payload = jwt.decode(
+                token,
+                settings.SUPABASE_JWT_SECRET,
+                algorithms=["HS256"],
+                options={"verify_aud": False},
+            )
+            return payload
+        except JWTError as exc:
+            logger.debug(f"HS256 verification failed: {exc}")
+
+    # 3. Direct verification via Supabase GoTrue Auth API (handles any valid Supabase token)
+    try:
+        user_resp = supabase_admin.auth.get_user(token)
+        if user_resp and user_resp.user:
+            user = user_resp.user
+            logger.debug(f"Verified token via Supabase Auth API for user {user.id}")
+            return {
+                "sub": str(user.id),
+                "email": user.email or "",
+                "role": user.role or "authenticated",
+                "app_metadata": user.app_metadata or {},
+                "user_metadata": user.user_metadata or {},
+            }
+    except Exception as exc:
+        logger.debug(f"Supabase auth.get_user verification failed: {exc}")
+
+    logger.warning("All Supabase JWT verification attempts failed for incoming token.")
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired authentication token.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 # ── Student profile loader ─────────────────────────────────────────────────────

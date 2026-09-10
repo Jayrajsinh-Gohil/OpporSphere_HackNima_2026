@@ -145,7 +145,10 @@ def create_app() -> FastAPI:
     app.include_router(team_finder.router,   prefix=prefix)
     app.include_router(content_gen.router,   prefix=prefix)
 
-    # Direct /api prefix aliases for prompt compatibility
+    # Direct /api prefix aliases for frontend and prompt compatibility
+    app.include_router(auth.router,          prefix="/api")
+    app.include_router(students.router,      prefix="/api")
+    app.include_router(opportunities.router, prefix="/api")
     app.include_router(match.router,         prefix="/api")
     app.include_router(trust.router,         prefix="/api")
     app.include_router(content_gen.router,   prefix="/api")

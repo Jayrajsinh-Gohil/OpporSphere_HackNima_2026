@@ -31,10 +31,16 @@ bearer_scheme = HTTPBearer()
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ) -> dict:
-    """Extract and validate the JWT from Authorization header."""
+    """Extract and validate the JWT from Authorization header (supports local and Supabase JWTs)."""
     try:
         claims = auth_service.decode_token(credentials.credentials)
         return claims
+    except Exception:
+        pass
+
+    try:
+        from app.api.deps import _decode_supabase_jwt
+        return _decode_supabase_jwt(credentials.credentials)
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
