@@ -166,7 +166,7 @@ async def get_team_matches(
     # 2. Get current student profile & embedding (reusing Phase B3)
     curr_resp = (
         supabase_admin.table("students")
-        .select("id, name, skills, interests, career_goals, preferred_role, embedding")
+        .select("id, name, skills, interests, career_goals, embedding")
         .eq("id", sid_str)
         .maybe_single()
         .execute()
@@ -264,7 +264,7 @@ async def get_team_matches(
     # 5. Fetch candidate student profiles & embeddings
     candidates_resp = (
         supabase_admin.table("students")
-        .select("id, name, avatar_url, department, skills, interests, career_goals, preferred_role, embedding")
+        .select("id, name, avatar_url, department, location, skills, interests, career_goals, embedding")
         .in_("id", eligible_candidate_ids)
         .execute()
     )

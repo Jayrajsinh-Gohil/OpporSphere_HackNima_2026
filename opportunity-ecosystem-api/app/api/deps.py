@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import urllib.request
-from typing import Annotated, Any, Dict, List
+from typing import Annotated, Any, Dict, List, Optional
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
@@ -184,6 +184,8 @@ async def _is_admin(email: str) -> bool:
 
 
 # ── Public dependencies ────────────────────────────────────────────────────────
+_optional_bearer = HTTPBearer(auto_error=False)
+
 
 async def get_current_student(
     credentials: HTTPAuthorizationCredentials = Depends(_bearer),
@@ -210,6 +212,23 @@ async def get_current_student(
     return await _load_student(user_id, email)
 
 
+async def get_optional_current_student(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_optional_bearer),
+) -> Optional[StudentProfile]:
+    """Dependency: returns student if valid token provided, otherwise None."""
+    if not credentials or not credentials.credentials:
+        return None
+    try:
+        claims = _decode_supabase_jwt(credentials.credentials)
+        user_id: str | None = claims.get("sub")
+        email: str = claims.get("email", "")
+        if not user_id:
+            return None
+        return await _load_student(user_id, email)
+    except Exception:
+        return None
+
+
 async def require_admin(
     student: StudentProfile = Depends(get_current_student),
 ) -> StudentProfile:
@@ -228,5 +247,6 @@ async def require_admin(
 
 
 # ── Type aliases for cleaner route signatures ──────────────────────────────────
-CurrentStudent = Annotated[StudentProfile, Depends(get_current_student)]
-AdminStudent   = Annotated[StudentProfile, Depends(require_admin)]
+CurrentStudent  = Annotated[StudentProfile, Depends(get_current_student)]
+OptionalStudent = Annotated[Optional[StudentProfile], Depends(get_optional_current_student)]
+AdminStudent    = Annotated[StudentProfile, Depends(require_admin)]

@@ -132,6 +132,38 @@ export const api = {
       );
     },
 
+    getEvents: () =>
+      api.get<APIResponseEnvelope<Array<{
+        id: string;
+        opportunity_id: string;
+        title: string;
+        domain: string;
+        type: string;
+        location: string;
+        organizer: string;
+        deadline: string;
+        date: string;
+        status: string;
+        prize_pool?: string;
+        max_team_size?: number;
+        format?: string;
+      }>>>("/api/team-finder/events"),
+
+    getCandidates: (params?: { limit?: number; role?: string; location?: string }) => {
+      const qs = params ? `?${new URLSearchParams(params as Record<string, string>).toString()}` : "";
+      return api.get<APIResponseEnvelope<Array<{
+        student_id: string;
+        name: string;
+        department: string;
+        location: string;
+        preferred_role: string;
+        skills: string[];
+        interests: string[];
+        career_goals: string;
+        avatar_url?: string;
+      }>>>(`/api/team-finder/candidates${qs}`);
+    },
+
     invite: (payload: TeamInviteRequest) =>
       api.post<APIResponseEnvelope<TeamInviteResponse>>("/api/team-finder/invite", payload),
 
@@ -172,13 +204,15 @@ export const api = {
       api.post<APIResponseEnvelope<unknown>>("/api/match/", payload),
   },
 
-  // Opportunities
+  // Opportunities & Events
   opportunities: {
     list: (params?: Record<string, string | number>) => {
       const qs = params ? `?${new URLSearchParams(params as Record<string, string>).toString()}` : "";
-      return api.get<OpportunityListItem[]>(`/api/opportunities${qs}`);
+      return api.get<APIResponseEnvelope<OpportunityListItem[]> | OpportunityListItem[]>(`/api/opportunities${qs}`);
     },
-    get: (id: string) => api.get<OpportunityDetail>(`/api/opportunities/${id}`),
+    get: (id: string) => api.get<APIResponseEnvelope<OpportunityDetail> | OpportunityDetail>(`/api/opportunities/${id}`),
+    events: () =>
+      api.get<APIResponseEnvelope<Array<Record<string, unknown>>>>("/api/team-finder/events"),
   },
 };
 

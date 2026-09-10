@@ -75,9 +75,23 @@ class SentenceTransformerEmbedder:
         return [v.tolist() for v in vectors]
 
     @staticmethod
-    def cosine_similarity(a: Vector, b: Vector) -> float:
+    def cosine_similarity(a: Any, b: Any) -> float:
         """Quick cosine similarity between two 384-dim vectors."""
-        na, nb = np.array(a), np.array(b)
+        import json
+        if isinstance(a, str):
+            try:
+                a = json.loads(a)
+            except Exception:
+                return 0.0
+        if isinstance(b, str):
+            try:
+                b = json.loads(b)
+            except Exception:
+                return 0.0
+        if a is None or b is None:
+            return 0.0
+        na = np.array(a, dtype=float)
+        nb = np.array(b, dtype=float)
         denom = np.linalg.norm(na) * np.linalg.norm(nb)
         return float(np.dot(na, nb) / denom) if denom else 0.0
 
