@@ -214,6 +214,32 @@ export const api = {
     events: () =>
       api.get<APIResponseEnvelope<Array<Record<string, unknown>>>>("/api/team-finder/events"),
   },
+
+  // Admin Portal
+  admin: {
+    me: () =>
+      api.get<APIResponseEnvelope<AdminMeResponse>>("/api/admin/me"),
+    getMetrics: () =>
+      api.get<APIResponseEnvelope<AdminMetricsResponse>>("/api/admin/metrics"),
+    getOpportunities: (params?: { q?: string; domain?: string; type?: string; page?: number; page_size?: number }) => {
+      const qs = params ? `?${new URLSearchParams(params as unknown as Record<string, string>).toString()}` : "";
+      return api.get<APIResponseEnvelope<AdminOpportunitiesResponse>>(`/api/admin/opportunities${qs}`);
+    },
+    createOpportunity: (payload: AdminCreateOpportunityInput) =>
+      api.post<APIResponseEnvelope<OpportunityDetail>>("/api/opportunities", payload),
+    deleteOpportunity: (id: string) =>
+      api.delete<APIResponseEnvelope<{ id: string }>>(`/api/admin/opportunities/${id}`),
+    getStudents: (params?: { q?: string; page?: number; page_size?: number }) => {
+      const qs = params ? `?${new URLSearchParams(params as unknown as Record<string, string>).toString()}` : "";
+      return api.get<APIResponseEnvelope<AdminStudentsResponse>>(`/api/admin/students${qs}`);
+    },
+    getSettings: () =>
+      api.get<APIResponseEnvelope<AdminSettingItem[]>>("/api/admin/settings"),
+    updateSetting: (key: string, value: string) =>
+      api.patch<APIResponseEnvelope<AdminSettingItem[]>>("/api/admin/settings", { key, value }),
+    getRoster: () =>
+      api.get<APIResponseEnvelope<AdminRosterItem[]>>("/api/admin/roster"),
+  },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -436,4 +462,104 @@ export interface RecommendationsResponse {
   recommendations: RecommendationItem[];
   total: number;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin Types
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface AdminMeResponse {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  is_admin: boolean;
+}
+
+export interface AdminMetricsResponse {
+  total_students: number;
+  total_opportunities: number;
+  active_opportunities: number;
+  total_events: number;
+  total_admins: number;
+  active_llm_provider: string;
+  domain_distribution: Record<string, number>;
+  type_distribution: Record<string, number>;
+  settings: Record<string, string>;
+}
+
+export interface AdminOpportunityItem {
+  id: string;
+  title: string;
+  description: string;
+  domain: string;
+  type: string;
+  eligibility?: string;
+  deadline?: string;
+  location?: string;
+  organizer?: string;
+  source_url?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface AdminOpportunitiesResponse {
+  items: AdminOpportunityItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface AdminStudentItem {
+  id: string;
+  name: string;
+  email: string;
+  department?: string;
+  location?: string;
+  skills?: string[];
+  interests?: string[];
+  career_goals?: string;
+  avatar_url?: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface AdminStudentsResponse {
+  items: AdminStudentItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface AdminSettingItem {
+  key: string;
+  value: string;
+  description?: string;
+  updated_by?: string;
+  updated_at?: string;
+}
+
+export interface AdminRosterItem {
+  id: string;
+  email: string;
+  role: string;
+  added_by?: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface AdminCreateOpportunityInput {
+  title: string;
+  description: string;
+  domain: string;
+  type: string;
+  location?: string;
+  organizer?: string;
+  deadline?: string;
+  eligibility?: string;
+  source_url?: string;
+}
+
 

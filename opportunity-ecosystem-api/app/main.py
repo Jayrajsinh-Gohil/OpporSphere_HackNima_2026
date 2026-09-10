@@ -49,6 +49,7 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 
 from app.api import (
+    admin,
     auth,
     content_gen,
     copilot,
@@ -132,6 +133,8 @@ def create_app() -> FastAPI:
 
     # ── API v1 routers ──────────────────────────────────────────────────────────────
     prefix = "/api/v1"
+    # Admin
+    app.include_router(admin.router,         prefix=prefix)
     # Auth
     app.include_router(auth.router,          prefix=prefix)
     # Core CRUD (B2)
@@ -146,6 +149,7 @@ def create_app() -> FastAPI:
     app.include_router(content_gen.router,   prefix=prefix)
 
     # Direct /api prefix aliases for frontend and prompt compatibility
+    app.include_router(admin.router,         prefix="/api")
     app.include_router(auth.router,          prefix="/api")
     app.include_router(students.router,      prefix="/api")
     app.include_router(opportunities.router, prefix="/api")

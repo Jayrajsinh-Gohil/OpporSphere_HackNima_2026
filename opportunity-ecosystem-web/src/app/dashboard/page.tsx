@@ -60,7 +60,15 @@ function DashboardContent() {
             <span className="font-bold text-lg text-white">OpporSphere</span>
           </Link>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <Link
+              href="/admin"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 hover:text-indigo-300 text-xs font-semibold transition cursor-pointer"
+            >
+              <Shield className="h-3.5 w-3.5" />
+              <span>Admin Console</span>
+            </Link>
+
             <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-300">
               <User className="h-3.5 w-3.5 text-indigo-400" />
               <span>{user?.email}</span>
