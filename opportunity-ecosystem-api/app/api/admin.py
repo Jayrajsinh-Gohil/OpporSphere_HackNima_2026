@@ -48,7 +48,7 @@ async def get_admin_me(admin: AdminStudent):
         .maybe_single()
         .execute()
     )
-    role = admin_record.data.get("role", "admin") if admin_record.data else "admin"
+    role = admin_record.data.get("role", "admin") if (admin_record and admin_record.data) else "admin"
 
     return APIResponse(
         data={

@@ -143,17 +143,18 @@ async def _load_student(user_id: str, email: str) -> StudentProfile:
         .execute()
     )
 
-    if resp.data:
+    if resp and resp.data:
         return StudentProfile(**resp.data)
 
     # ── Auto-create a minimal profile on first authenticated request ──────────
     logger.info(f"Auto-creating student profile for {user_id}")
+    clean_email = email.strip() if email else ""
     insert_resp = (
         supabase_admin.table("students")
-        .insert({"id": user_id, "email": email, "name": email.split("@")[0]})
+        .insert({"id": user_id, "email": clean_email, "name": clean_email.split("@")[0] if clean_email else "Student"})
         .execute()
     )
-    if not insert_resp.data:
+    if not insert_resp or not insert_resp.data:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Could not create student profile.",
@@ -168,16 +169,18 @@ async def _is_admin(email: str) -> bool:
     Check whether the given email exists in the `admins` table.
     Admins are managed via Supabase dashboard (not .env).
     """
+    if not email:
+        return False
     try:
         resp = (
             supabase_admin.table("admins")
             .select("id")
-            .eq("email", email.lower())
+            .eq("email", email.strip().lower())
             .eq("is_active", True)
             .maybe_single()
             .execute()
         )
-        return bool(resp.data)
+        return bool(resp and resp.data)
     except Exception as exc:
         logger.warning(f"Admin check failed for {email}: {exc}")
         return False

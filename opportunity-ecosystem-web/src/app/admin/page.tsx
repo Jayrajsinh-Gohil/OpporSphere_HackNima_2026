@@ -363,6 +363,12 @@ export default function AdminPage() {
               Your account (<span className="text-zinc-200 font-mono font-medium">{user.email}</span>) is not authorized to access the Admin Portal.
             </p>
 
+            {authError && (
+              <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-300 font-mono text-left">
+                Detail: {authError}
+              </div>
+            )}
+
             <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800/80 text-left text-xs text-zinc-400 mb-6 space-y-1.5">
               <div className="font-semibold text-zinc-300 flex items-center gap-1.5">
                 <Lock className="h-3.5 w-3.5 text-amber-400" />
