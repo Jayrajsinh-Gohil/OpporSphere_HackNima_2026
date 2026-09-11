@@ -41,7 +41,17 @@ Endpoints overview:
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
+import socket
+
+# Prefer IPv4 over blackholed IPv6 routes to prevent 30-90s connection timeouts on external requests
+_orig_getaddrinfo = socket.getaddrinfo
+def _ipv4_preferred_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+    if family == 0:
+        family = socket.AF_INET
+    return _orig_getaddrinfo(host, port, family, type, proto, flags)
+socket.getaddrinfo = _ipv4_preferred_getaddrinfo
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -70,26 +80,29 @@ async def lifespan(app: FastAPI):
     """Startup and shutdown lifecycle hooks."""
     logger.info(f"🚀 Starting {settings.APP_NAME} [{settings.APP_ENV}]")
 
-    # Validate Supabase connectivity on startup
-    try:
-        from app.core.supabase_client import supabase_admin
-        supabase_admin.table("students").select("id").limit(1).execute()
-        logger.info("✅ Supabase connection verified (students table).")
-    except Exception as exc:
-        logger.warning(f"⚠️  Supabase not reachable at startup: {exc}")
+    async def _async_warmup():
+        # Validate Supabase connectivity in background
+        try:
+            from app.core.supabase_client import supabase_admin
+            await asyncio.to_thread(lambda: supabase_admin.table("students").select("id").limit(1).execute())
+            logger.info("✅ Supabase connection verified (students table).")
+        except Exception as exc:
+            logger.warning(f"⚠️  Supabase background check notice: {exc}")
 
-    # Pre-warm local SentenceTransformer model (all-MiniLM-L6-v2) once at startup
-    try:
-        import asyncio
-        from app.ml.embeddings import get_local_embedder
-        logger.info("🔄 Pre-warming SentenceTransformer model (all-MiniLM-L6-v2)...")
-        embedder = get_local_embedder()
-        await asyncio.to_thread(embedder.load_model)
-        logger.info("✅ SentenceTransformer (all-MiniLM-L6-v2) loaded and ready.")
-    except Exception as exc:
-        logger.warning(f"⚠️  Could not pre-warm sentence-transformers model: {exc}")
+        # Pre-warm local SentenceTransformer model in background thread
+        try:
+            from app.ml.embeddings import get_local_embedder
+            logger.info("🔄 Pre-warming SentenceTransformer model (all-MiniLM-L6-v2)...")
+            embedder = get_local_embedder()
+            await asyncio.to_thread(embedder.load_model)
+            logger.info("✅ SentenceTransformer (all-MiniLM-L6-v2) loaded and ready.")
+        except Exception as exc:
+            logger.warning(f"⚠️  Could not pre-warm sentence-transformers model: {exc}")
 
-    yield  # Application runs here
+    # Launch warmup in background so FastAPI starts listening and serving HTTP traffic instantly
+    asyncio.create_task(_async_warmup())
+
+    yield  # Application runs immediately without startup delays
 
     logger.info("🛑 Shutting down OpporSphere API.")
 
