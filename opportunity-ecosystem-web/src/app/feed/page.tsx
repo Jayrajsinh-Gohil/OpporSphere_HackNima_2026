@@ -246,11 +246,14 @@ export default function OpportunityFeedPage() {
             location: op.location || "India",
             organizer: op.organizer || "Verified Organizer",
             deadline: op.deadline || "Open",
-            trust_score: op.trust_score ?? 95,
-            similarity: 0.92 - (idx * 0.003),
-            match_relevance_pct: Math.max(65, Math.round((0.95 - (idx * 0.004)) * 100)),
-            is_fallback: false,
-            reason: `Verified ${op.type || "opportunity"} in ${op.domain || "Technology"} (${op.location || "India"}).`,
+            // Use real trust_score from DB if present; otherwise use a neutral default (not inflated 95)
+            trust_score: typeof op.trust_score === "number" ? op.trust_score : 70,
+            // Realistic spread: top item ~75%, decreasing realistically across the list
+            similarity: Math.max(0.30, 0.75 - idx * 0.008),
+            // Honest match% based on rank — clearly signals fallback, not a personalised AI score
+            match_relevance_pct: Math.max(30, Math.round((0.75 - idx * 0.008) * 100)),
+            is_fallback: true,
+            reason: `Verified ${op.type || "opportunity"} in ${op.domain || "Technology"} (${op.location || "India"}). Complete your profile to get personalised AI match scores.`,
           }));
           setOpportunities(mapped);
         } else {

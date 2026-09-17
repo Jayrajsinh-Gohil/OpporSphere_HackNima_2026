@@ -23,14 +23,14 @@ interface OpportunityCardProps {
 export function OpportunityCard({ opportunity, onViewDetails }: OpportunityCardProps) {
   const [isBookmarked, setIsBookmarked] = useState(false);
 
-  // Match % score calculation
+  // Match % score calculation — use the actual value, no fake fallback inflation
   const matchPct = Math.round(
-    opportunity.match_relevance_pct ||
-      (opportunity.similarity ? opportunity.similarity * 100 : 85)
+    opportunity.match_relevance_pct ??
+      (opportunity.similarity != null ? opportunity.similarity * 100 : 0)
   );
 
-  // Trust score: 0 - 100
-  const trustScore = opportunity.trust_score ?? 90;
+  // Trust score: 0 - 100 (0 = not yet rated, not inflated)
+  const trustScore = opportunity.trust_score ?? 0;
 
   // Match Badge styling
   const getMatchBadgeStyle = (pct: number) => {
@@ -164,7 +164,7 @@ export function OpportunityCard({ opportunity, onViewDetails }: OpportunityCardP
       {/* Card Footer: Action Buttons */}
       <div className="pt-4 border-t border-zinc-800/80 flex items-center justify-between gap-3">
         <span className="text-[11px] text-zinc-500">
-          Grounded pgvector Match
+          {opportunity.is_fallback ? "Browse mode · Profile match unavailable" : "Grounded pgvector Match"}
         </span>
 
         <button

@@ -25,7 +25,9 @@ import {
 
 // Convert DiscoveredOpportunityItem into standard RecommendationItem for OpportunityCard
 function mapDiscoveredToCardItem(item: DiscoveredOpportunityItem): RecommendationItem {
-  const matchPct = Math.round((item.relevance_score ?? 0.85) * 100);
+  // Use real relevance_score — never inflate with fake fallback
+  const relevance = item.relevance_score ?? 0;
+  const matchPct = Math.round(relevance * 100);
   return {
     id: String(item.id),
     title: item.title,
@@ -35,10 +37,11 @@ function mapDiscoveredToCardItem(item: DiscoveredOpportunityItem): Recommendatio
     location: item.location || "Campus / Remote",
     organizer: item.organizer || "Campus Coordinator",
     deadline: item.deadline || "Open",
-    trust_score: item.trust_score ?? 92,
-    similarity: item.relevance_score ?? 0.85,
+    // Use actual trust_score from backend; 0 means not yet rated (not 92)
+    trust_score: typeof item.trust_score === "number" ? item.trust_score : 0,
+    similarity: relevance,
     match_relevance_pct: matchPct,
-    is_fallback: false,
+    is_fallback: relevance === 0,
     reason: item.match_reason,
   };
 }
