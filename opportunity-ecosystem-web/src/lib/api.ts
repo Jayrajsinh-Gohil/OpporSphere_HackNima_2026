@@ -222,7 +222,11 @@ export const api = {
     getMetrics: () =>
       api.get<APIResponseEnvelope<AdminMetricsResponse>>("/api/admin/metrics"),
     getOpportunities: (params?: { q?: string; domain?: string; type?: string; page?: number; page_size?: number }) => {
-      const qs = params ? `?${new URLSearchParams(params as unknown as Record<string, string>).toString()}` : "";
+      // Strip undefined/null values — URLSearchParams converts them to the literal string "undefined"
+      const clean = Object.fromEntries(
+        Object.entries(params ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== "")
+      );
+      const qs = Object.keys(clean).length > 0 ? `?${new URLSearchParams(clean as Record<string, string>).toString()}` : "";
       return api.get<APIResponseEnvelope<AdminOpportunitiesResponse>>(`/api/admin/opportunities${qs}`);
     },
     createOpportunity: (payload: AdminCreateOpportunityInput) =>
@@ -230,7 +234,11 @@ export const api = {
     deleteOpportunity: (id: string) =>
       api.delete<APIResponseEnvelope<{ id: string }>>(`/api/admin/opportunities/${id}`),
     getStudents: (params?: { q?: string; page?: number; page_size?: number }) => {
-      const qs = params ? `?${new URLSearchParams(params as unknown as Record<string, string>).toString()}` : "";
+      // Strip undefined/null values — URLSearchParams converts them to the literal string "undefined"
+      const clean = Object.fromEntries(
+        Object.entries(params ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== "")
+      );
+      const qs = Object.keys(clean).length > 0 ? `?${new URLSearchParams(clean as Record<string, string>).toString()}` : "";
       return api.get<APIResponseEnvelope<AdminStudentsResponse>>(`/api/admin/students${qs}`);
     },
     getSettings: () =>
