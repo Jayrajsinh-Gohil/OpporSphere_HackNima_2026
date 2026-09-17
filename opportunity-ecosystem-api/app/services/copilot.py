@@ -28,9 +28,11 @@ SYSTEM_INSTRUCTIONS = (
     "You are Copilot, a friendly and helpful AI assistant for OpporSphere — a student opportunity platform. "
     "Your job is to help students discover hackathons, internships, fellowships, workshops, and competitions. "
     "When opportunity context is provided, base your answers on it and present details in a warm, conversational way. "
-    "Always be encouraging and student-friendly. Never just list raw IDs or technical fields — speak like a helpful human advisor. "
+    "Always be encouraging and student-friendly. Never list raw IDs or technical field names — speak like a helpful human advisor. "
     "For greetings and general questions not about specific opportunities, respond naturally and warmly. "
-    "If you genuinely don't know something, say so honestly and suggest what the student can ask you."
+    "If you genuinely don't know something, say so honestly and suggest what the student can ask you. "
+    "IMPORTANT: Use plain text only. Do NOT use markdown formatting such as ** for bold, * for italic, or # for headings. "
+    "Use the bullet character • for lists. Write in natural, flowing sentences."
 )
 
 # Minimum cosine similarity threshold to consider retrieved context relevant
@@ -56,17 +58,18 @@ _GREETING_RESPONSES = [
     (
         "👋 Hey there! I'm your OpporSphere Copilot — your personal guide to finding the best "
         "student opportunities! I can help you discover hackathons, internships, research fellowships, "
-        "workshops, and competitions. \n\n"
+        "workshops, and competitions.\n\n"
         "Try asking me things like:\n"
-        "• *What hackathons are available for CS students in India?*\n"
-        "• *Are there any paid AI internships with open deadlines?*\n"
-        "• *Which opportunities have cash prizes?*\n\n"
+        "• What hackathons are available for CS students in India?\n"
+        "• Are there any paid AI internships with open deadlines?\n"
+        "• Which opportunities have cash prizes?\n\n"
         "What are you looking for? 🚀"
     ),
     (
         "Hello! 😊 Great to have you here. I'm Copilot — think of me as your smart assistant "
         "for navigating student opportunities. Ask me about hackathons, internships, scholarships, "
-        "or anything opportunity-related and I'll search our verified database for you!"
+        "or anything opportunity-related and I'll search our verified database for you!\n\n"
+        "What can I help you find today?"
     ),
 ]
 
@@ -85,7 +88,7 @@ def _is_greeting_or_smalltalk(message: str) -> bool:
 
 
 def _greeting_response(message: str) -> str:
-    """Generate a contextual greeting response."""
+    """Generate a contextual greeting response — plain text, no markdown."""
     msg = message.lower()
     if any(w in msg for w in ["thanks", "thank", "thx", "ty"]):
         return (
@@ -99,13 +102,13 @@ def _greeting_response(message: str) -> str:
         )
     if any(w in msg for w in ["who are you", "what are you", "what can you do", "help"]):
         return (
-            "I'm **Copilot** — your AI assistant for finding student opportunities on OpporSphere! 🤖\n\n"
+            "I'm Copilot — your AI assistant for finding student opportunities on OpporSphere! 🤖\n\n"
             "Here's what I can help you with:\n"
-            "• 🏆 **Hackathons** — Find upcoming hack events by domain, location, or prize pool\n"
-            "• 💼 **Internships** — Discover paid and research internship openings\n"
-            "• 🎓 **Fellowships & Scholarships** — Explore funding opportunities\n"
-            "• 🔬 **Workshops & Bootcamps** — Find skill-building events\n"
-            "• ⏰ **Deadlines** — Get deadline reminders for any opportunity\n\n"
+            "• Hackathons — Find upcoming hack events by domain, location, or prize pool\n"
+            "• Internships — Discover paid and research internship openings\n"
+            "• Fellowships and Scholarships — Explore funding opportunities\n"
+            "• Workshops and Bootcamps — Find skill-building events\n"
+            "• Deadlines — Get deadline reminders for any opportunity\n\n"
             "Just ask me anything in plain English!"
         )
     if any(w in msg for w in ["how are you", "how r u", "how do you do"]):

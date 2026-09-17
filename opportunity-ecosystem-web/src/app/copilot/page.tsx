@@ -37,55 +37,50 @@ const STARTER_PROMPTS = [
   "Which competitions have upcoming deadlines and cash prizes?",
 ];
 
-// Lightweight markdown renderer — handles **bold**, *italic*, bullet lists
-function renderMarkdown(text: string): React.ReactNode[] {
-  const lines = text.split("\n");
-  return lines.map((line, lineIdx) => {
-    // Bullet lines: lines starting with •, -, or *
-    const bulletMatch = line.match(/^(\s*)([•\-\*])\s+(.*)/);
-    if (bulletMatch) {
-      const content = bulletMatch[3];
-      return (
-        <div key={lineIdx} className="flex items-start gap-2 py-0.5">
-          <span className="text-pink-400 mt-0.5 shrink-0">•</span>
-          <span>{renderInline(content)}</span>
-        </div>
-      );
-    }
-    // Empty line — spacer
-    if (line.trim() === "") {
-      return <div key={lineIdx} className="h-1" />;
-    }
-    // Normal line
-    return <div key={lineIdx}>{renderInline(line)}</div>;
-  });
+// Lightweight markdown renderer using dangerouslySetInnerHTML
+// HTML is escaped first to prevent XSS, then markdown patterns are applied
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
-// Renders inline markdown: **bold**, *italic*
-function renderInline(text: string): React.ReactNode {
-  const parts: React.ReactNode[] = [];
-  // Split on **bold** and *italic* patterns
-  const regex = /(\*\*([^*]+)\*\*|\*([^*]+)\*)/g;
-  let lastIndex = 0;
-  let match;
-  let key = 0;
-  while ((match = regex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push(<span key={key++}>{text.slice(lastIndex, match.index)}</span>);
-    }
-    if (match[2]) {
-      // **bold**
-      parts.push(<strong key={key++} className="font-semibold text-white">{match[2]}</strong>);
-    } else if (match[3]) {
-      // *italic*
-      parts.push(<em key={key++} className="italic text-zinc-300">{match[3]}</em>);
-    }
-    lastIndex = match.index + match[0].length;
-  }
-  if (lastIndex < text.length) {
-    parts.push(<span key={key++}>{text.slice(lastIndex)}</span>);
-  }
-  return parts.length > 0 ? <>{parts}</> : text;
+function applyInlineMarkdown(text: string): string {
+  // Must escape HTML first before applying markdown
+  const safe = escapeHtml(text);
+  return safe
+    // **bold** → <strong>
+    .replace(/\*\*([^*]+)\*\*/g, '<strong class="font-semibold text-white">$1</strong>')
+    // *italic* → <em>
+    .replace(/\*([^*]+)\*/g, '<em class="italic text-zinc-300">$1</em>');
+}
+
+function renderMarkdown(text: string): React.ReactNode {
+  const html = text
+    .split("\n")
+    .map((line) => {
+      // Bullet lines: start with •, -, or *
+      const bulletMatch = line.match(/^[\s]*([\u2022\-\*])\s+(.*)/);
+      if (bulletMatch) {
+        const content = applyInlineMarkdown(bulletMatch[2]);
+        return `<div class="flex items-start gap-2 py-0.5"><span class="text-pink-400 mt-0.5 shrink-0">•</span><span>${content}</span></div>`;
+      }
+      // Empty line
+      if (line.trim() === "") {
+        return `<div class="h-2"></div>`;
+      }
+      // Normal paragraph line
+      return `<div class="leading-relaxed">${applyInlineMarkdown(line)}</div>`;
+    })
+    .join("");
+
+  return (
+    <div
+      className="space-y-0.5"
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
 }
 
 
@@ -308,7 +303,7 @@ export default function CopilotPage() {
                         : "bg-zinc-900/90 border border-zinc-800 text-zinc-200 rounded-tl-none"
                     }`}
                   >
-                    <div className="space-y-0.5 leading-relaxed">
+                    <div className="text-xs leading-relaxed">
                       {msg.sender === "assistant"
                         ? renderMarkdown(msg.text)
                         : <p className="whitespace-pre-wrap">{msg.text}</p>
