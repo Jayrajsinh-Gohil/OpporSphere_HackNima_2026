@@ -243,8 +243,10 @@ export const api = {
     },
     getSettings: () =>
       api.get<APIResponseEnvelope<AdminSettingItem[]>>("/api/admin/settings"),
-    updateSetting: (key: string, value: string) =>
-      api.patch<APIResponseEnvelope<AdminSettingItem[]>>("/api/admin/settings", { key, value }),
+    updateSetting: (key: string, value: string, description?: string) =>
+      api.patch<APIResponseEnvelope<AdminSettingItem[]>>("/api/admin/settings", { key, value, description }),
+    deleteSetting: (key: string) =>
+      api.delete<APIResponseEnvelope<{ message: string }>>(`/api/admin/settings/${key}`),
     getRoster: () =>
       api.get<APIResponseEnvelope<AdminRosterItem[]>>("/api/admin/roster"),
   },

@@ -42,6 +42,9 @@ import {
   Filter,
   X,
   Lock,
+  Edit2,
+  Check,
+  Save,
 } from "lucide-react";
 
 function GoogleIcon({ className = "h-5 w-5" }: { className?: string }) {
@@ -66,6 +69,13 @@ function GoogleIcon({ className = "h-5 w-5" }: { className?: string }) {
     </svg>
   );
 }
+
+const SETTING_PRESETS: Record<string, string[]> = {
+  LLM_PROVIDER: ["gemini", "ollama"],
+  GEMINI_MODEL: ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash", "gemini-3.1-flash-lite-preview"],
+  OLLAMA_MODEL: ["llama3.2:3b", "mistral:7b", "llama3.1:8b", "qwen2.5:7b"],
+  OLLAMA_HOST: ["http://localhost:11434", "http://127.0.0.1:11434"],
+};
 
 export default function AdminPage() {
   const router = useRouter();
@@ -116,6 +126,15 @@ export default function AdminPage() {
   const [settingsList, setSettingsList] = useState<AdminSettingItem[]>([]);
   const [rosterList, setRosterList] = useState<AdminRosterItem[]>([]);
   const [updatingSetting, setUpdatingSetting] = useState(false);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [savingSettingKey, setSavingSettingKey] = useState<string | null>(null);
+  const [showAddSettingModal, setShowAddSettingModal] = useState(false);
+  const [newSettingKey, setNewSettingKey] = useState("");
+  const [newSettingValue, setNewSettingValue] = useState("");
+  const [newSettingDesc, setNewSettingDesc] = useState("");
+  const [isAddingSetting, setIsAddingSetting] = useState(false);
 
   // 1. Verify Admin Status
   useEffect(() => {
@@ -291,6 +310,81 @@ export default function AdminPage() {
     }
   };
 
+  // Start editing a setting
+  const startEditSetting = (stg: AdminSettingItem) => {
+    setEditingKey(stg.key);
+    setEditValue(stg.value);
+    setEditDescription(stg.description || "");
+  };
+
+  // Cancel editing
+  const cancelEditSetting = () => {
+    setEditingKey(null);
+    setEditValue("");
+    setEditDescription("");
+  };
+
+  // Save edited setting
+  const handleSaveSetting = async (key: string) => {
+    if (!editValue.trim()) {
+      alert("Value cannot be empty.");
+      return;
+    }
+    setSavingSettingKey(key);
+    try {
+      await api.admin.updateSetting(key, editValue.trim(), editDescription.trim() || undefined);
+      setActionSuccessMsg(`Setting "${key}" updated successfully!`);
+      setTimeout(() => setActionSuccessMsg(null), 4000);
+      setEditingKey(null);
+      await Promise.all([loadSettingsAndRoster(), loadMetrics()]);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to save setting");
+    } finally {
+      setSavingSettingKey(null);
+    }
+  };
+
+  // Add new setting
+  const handleAddSetting = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSettingKey.trim() || !newSettingValue.trim()) {
+      alert("Key and value are required.");
+      return;
+    }
+    setIsAddingSetting(true);
+    try {
+      await api.admin.updateSetting(newSettingKey.trim(), newSettingValue.trim(), newSettingDesc.trim() || undefined);
+      setActionSuccessMsg(`Setting "${newSettingKey.trim()}" created successfully!`);
+      setTimeout(() => setActionSuccessMsg(null), 4000);
+      setShowAddSettingModal(false);
+      setNewSettingKey("");
+      setNewSettingValue("");
+      setNewSettingDesc("");
+      await Promise.all([loadSettingsAndRoster(), loadMetrics()]);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to add setting");
+    } finally {
+      setIsAddingSetting(false);
+    }
+  };
+
+  // Delete a setting
+  const handleDeleteSetting = async (key: string) => {
+    if (["LLM_PROVIDER", "GEMINI_MODEL", "OLLAMA_MODEL", "OLLAMA_HOST"].includes(key)) {
+      if (!confirm(`Warning: "${key}" is a core system setting. Are you sure you want to delete it?`)) return;
+    } else {
+      if (!confirm(`Are you sure you want to delete setting "${key}"?`)) return;
+    }
+    try {
+      await api.admin.deleteSetting(key);
+      setActionSuccessMsg(`Setting "${key}" deleted.`);
+      setTimeout(() => setActionSuccessMsg(null), 4000);
+      await Promise.all([loadSettingsAndRoster(), loadMetrics()]);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Failed to delete setting");
+    }
+  };
+
   // ───────────────────────────────────────────────────────────────────────────
   // Loading screen during verification
   // ───────────────────────────────────────────────────────────────────────────
@@ -408,7 +502,10 @@ export default function AdminPage() {
   // ───────────────────────────────────────────────────────────────────────────
   // Authorized Admin Workspace
   // ───────────────────────────────────────────────────────────────────────────
-  const activeLLM = metrics?.active_llm_provider || "gemini";
+  const activeLLM = settingsList.find((s) => s.key === "LLM_PROVIDER")?.value || metrics?.active_llm_provider || "gemini";
+  const geminiModelSetting = settingsList.find((s) => s.key === "GEMINI_MODEL")?.value || "gemini-2.0-flash";
+  const ollamaModelSetting = settingsList.find((s) => s.key === "OLLAMA_MODEL")?.value || "llama3.2:3b";
+  const ollamaHostSetting = settingsList.find((s) => s.key === "OLLAMA_HOST")?.value || "http://localhost:11434";
 
   return (
     <div className="min-h-screen bg-black text-zinc-100 flex flex-col">
@@ -971,22 +1068,29 @@ export default function AdminPage() {
                   <span>AI Engine Runtime Configuration</span>
                 </h3>
                 <p className="text-xs text-zinc-400">
-                  Switch the LLM provider live in Supabase. Changes take effect on the very next AI request without restarting the server.
+                  Switch the active LLM provider live in Supabase. Changes take effect on the very next AI request without restarting the server.
                 </p>
               </div>
 
               <div className="space-y-4">
-                <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-950/60 flex items-center justify-between">
+                <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-950/60 flex items-center justify-between gap-4">
                   <div>
-                    <div className="font-semibold text-sm text-white">Google Gemini 2.0 Flash</div>
-                    <div className="text-xs text-zinc-400">Cloud AI: Fast, high-accuracy semantic embeddings & chat</div>
+                    <div className="font-semibold text-sm text-white flex items-center gap-2">
+                      <span>Google Gemini</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                        {geminiModelSetting}
+                      </span>
+                    </div>
+                    <div className="text-xs text-zinc-400 mt-1">
+                      Cloud AI: Ultra-low latency embeddings, matching & interactive copilot chat
+                    </div>
                   </div>
                   <button
                     disabled={updatingSetting || activeLLM === "gemini"}
                     onClick={() => handleToggleLLM("gemini")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer border ${
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer border whitespace-nowrap shrink-0 ${
                       activeLLM === "gemini"
-                        ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
+                        ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300 shadow-sm shadow-emerald-500/10"
                         : "bg-zinc-800 hover:bg-zinc-700 border-zinc-700 text-zinc-300"
                     }`}
                   >
@@ -994,50 +1098,29 @@ export default function AdminPage() {
                   </button>
                 </div>
 
-                <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-950/60 flex items-center justify-between">
+                <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-950/60 flex items-center justify-between gap-4">
                   <div>
-                    <div className="font-semibold text-sm text-white">Local Ollama (Llama 3.2:3b)</div>
-                    <div className="text-xs text-zinc-400">On-device privacy: Local inference without cloud cost</div>
+                    <div className="font-semibold text-sm text-white flex items-center gap-2">
+                      <span>Local Ollama</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">
+                        {ollamaModelSetting}
+                      </span>
+                    </div>
+                    <div className="text-xs text-zinc-400 mt-1">
+                      Host: <span className="font-mono text-zinc-300">{ollamaHostSetting}</span> • On-device private inference
+                    </div>
                   </div>
                   <button
                     disabled={updatingSetting || activeLLM === "ollama"}
                     onClick={() => handleToggleLLM("ollama")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer border ${
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer border whitespace-nowrap shrink-0 ${
                       activeLLM === "ollama"
-                        ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
+                        ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300 shadow-sm shadow-emerald-500/10"
                         : "bg-zinc-800 hover:bg-zinc-700 border-zinc-700 text-zinc-300"
                     }`}
                   >
                     {activeLLM === "ollama" ? "ACTIVE" : "Select Ollama"}
                   </button>
-                </div>
-              </div>
-
-              {/* Settings Table */}
-              <div className="pt-4 border-t border-zinc-800">
-                <h4 className="text-xs font-semibold text-zinc-300 mb-3 flex items-center gap-1.5">
-                  <Database className="h-3.5 w-3.5 text-zinc-400" />
-                  <span>Database Key-Value Store (`app_settings`)</span>
-                </h4>
-                <div className="rounded-xl border border-zinc-800 bg-zinc-950/40 overflow-hidden">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-zinc-900/60 text-zinc-400 border-b border-zinc-800">
-                      <tr>
-                        <th className="px-3 py-2">Key</th>
-                        <th className="px-3 py-2">Value</th>
-                        <th className="px-3 py-2">Description</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-800/40 font-mono text-[11px]">
-                      {settingsList.map((stg) => (
-                        <tr key={stg.key} className="text-zinc-300">
-                          <td className="px-3 py-2 text-indigo-400">{stg.key}</td>
-                          <td className="px-3 py-2 text-emerald-300 font-bold">{stg.value}</td>
-                          <td className="px-3 py-2 text-zinc-500 font-sans">{stg.description}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
                 </div>
               </div>
             </div>
@@ -1092,6 +1175,213 @@ export default function AdminPage() {
                 <code className="block p-2 rounded-lg bg-black text-[11px] font-mono text-emerald-400">
                   INSERT INTO admins (email, role) VALUES ('colleague@gmail.com', 'admin');
                 </code>
+              </div>
+            </div>
+
+            {/* Database Key-Value Store (app_settings) - Full Width */}
+            <div className="col-span-1 lg:col-span-2 p-6 rounded-2xl border border-zinc-800 bg-zinc-900/30 space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                    <Database className="h-5 w-5 text-indigo-400" />
+                    <span>Database Key-Value Store (`app_settings`)</span>
+                  </h3>
+                  <p className="text-xs text-zinc-400 mt-1">
+                    Live runtime configuration stored in Supabase. Values take effect immediately on subsequent requests without restarting services.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => loadSettingsAndRoster()}
+                    className="p-2 rounded-xl border border-zinc-800 bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-white transition cursor-pointer"
+                    title="Refresh Settings from Database"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => setShowAddSettingModal(true)}
+                    className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-md shadow-indigo-600/20"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Add Setting</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 overflow-hidden shadow-inner">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-zinc-900/80 text-zinc-400 border-b border-zinc-800">
+                      <tr>
+                        <th className="px-4 py-3 font-semibold w-56">Setting Key</th>
+                        <th className="px-4 py-3 font-semibold min-w-[280px]">Value</th>
+                        <th className="px-4 py-3 font-semibold">Description</th>
+                        <th className="px-4 py-3 font-semibold w-40">Updated By</th>
+                        <th className="px-4 py-3 font-semibold text-right w-32">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-800/50 text-zinc-300">
+                      {settingsList.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-8 text-center text-zinc-500">
+                            No settings found in database. Click &quot;Add Setting&quot; to create one.
+                          </td>
+                        </tr>
+                      ) : (
+                        settingsList.map((stg) => {
+                          const isEditing = editingKey === stg.key;
+                          const isSaving = savingSettingKey === stg.key;
+                          const presets = SETTING_PRESETS[stg.key] || [];
+
+                          return (
+                            <tr
+                              key={stg.key}
+                              className={`transition ${
+                                isEditing ? "bg-indigo-950/20" : "hover:bg-zinc-900/30"
+                              }`}
+                            >
+                              <td className="px-4 py-3.5 align-top">
+                                <div className="flex flex-col gap-1">
+                                  <span className="font-mono text-indigo-400 font-semibold text-xs">
+                                    {stg.key}
+                                  </span>
+                                  {["LLM_PROVIDER", "GEMINI_MODEL", "OLLAMA_MODEL", "OLLAMA_HOST"].includes(stg.key) && (
+                                    <span className="inline-block w-fit px-1.5 py-0.5 rounded text-[9px] font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                                      CORE SYSTEM
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+
+                              <td className="px-4 py-3.5 align-top">
+                                {isEditing ? (
+                                  <div className="space-y-2">
+                                    <input
+                                      type="text"
+                                      value={editValue}
+                                      onChange={(e) => setEditValue(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") handleSaveSetting(stg.key);
+                                        if (e.key === "Escape") cancelEditSetting();
+                                      }}
+                                      autoFocus
+                                      className="w-full px-3 py-1.5 text-xs font-mono rounded-lg bg-black border border-indigo-500 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-inner"
+                                      placeholder="Enter new value..."
+                                    />
+
+                                    {/* Preset Suggestions */}
+                                    {presets.length > 0 && (
+                                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                                        <span className="text-[10px] text-zinc-500 font-medium">Quick Presets:</span>
+                                        {presets.map((preset) => (
+                                          <button
+                                            key={preset}
+                                            type="button"
+                                            onClick={() => setEditValue(preset)}
+                                            className={`px-2 py-0.5 rounded text-[10px] font-mono transition cursor-pointer border ${
+                                              editValue === preset
+                                                ? "bg-indigo-600 text-white border-indigo-500 shadow-sm"
+                                                : "bg-zinc-900 text-zinc-400 hover:text-zinc-200 border-zinc-800 hover:border-zinc-700"
+                                            }`}
+                                          >
+                                            {preset}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div
+                                    onClick={() => startEditSetting(stg)}
+                                    className="inline-flex items-center gap-2 font-mono text-emerald-300 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-lg cursor-pointer hover:border-emerald-500/40 hover:bg-emerald-500/15 transition group"
+                                    title="Click to edit value"
+                                  >
+                                    <span className="break-all">{stg.value}</span>
+                                    <Edit2 className="h-3 w-3 text-emerald-400/50 group-hover:text-emerald-300 opacity-0 group-hover:opacity-100 transition shrink-0" />
+                                  </div>
+                                )}
+                              </td>
+
+                              <td className="px-4 py-3.5 align-top text-zinc-400">
+                                {isEditing ? (
+                                  <input
+                                    type="text"
+                                    value={editDescription}
+                                    onChange={(e) => setEditDescription(e.target.value)}
+                                    className="w-full px-3 py-1.5 text-xs rounded-lg bg-black border border-zinc-700 text-zinc-300 focus:outline-none focus:border-indigo-500 shadow-inner"
+                                    placeholder="Optional description..."
+                                  />
+                                ) : (
+                                  <span className="text-xs">{stg.description || "—"}</span>
+                                )}
+                              </td>
+
+                              <td className="px-4 py-3.5 align-top text-zinc-500 font-mono text-[11px]">
+                                <div className="text-zinc-300 truncate max-w-[140px]" title={stg.updated_by || "system"}>
+                                  {stg.updated_by || "system"}
+                                </div>
+                                {stg.updated_at && (
+                                  <div className="text-zinc-600 text-[10px] mt-0.5">
+                                    {new Date(stg.updated_at).toLocaleString([], {
+                                      dateStyle: "short",
+                                      timeStyle: "short",
+                                    })}
+                                  </div>
+                                )}
+                              </td>
+
+                              <td className="px-4 py-3.5 align-top text-right">
+                                {isEditing ? (
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <button
+                                      onClick={() => handleSaveSetting(stg.key)}
+                                      disabled={isSaving}
+                                      className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-md shadow-emerald-600/20"
+                                      title="Save changes to database"
+                                    >
+                                      {isSaving ? (
+                                        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                                      ) : (
+                                        <Check className="h-3.5 w-3.5" />
+                                      )}
+                                      <span>Save</span>
+                                    </button>
+                                    <button
+                                      onClick={cancelEditSetting}
+                                      disabled={isSaving}
+                                      className="px-2 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 rounded-lg text-xs transition cursor-pointer"
+                                      title="Cancel editing"
+                                    >
+                                      <X className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <button
+                                      onClick={() => startEditSetting(stg)}
+                                      className="px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition cursor-pointer"
+                                      title="Edit setting"
+                                    >
+                                      <Edit2 className="h-3.5 w-3.5 text-zinc-400" />
+                                      <span>Edit</span>
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteSetting(stg.key)}
+                                      className="p-1.5 text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition cursor-pointer"
+                                      title="Delete setting"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
@@ -1239,6 +1529,101 @@ export default function AdminPage() {
                     </>
                   ) : (
                     <span>Publish Opportunity</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ADD SETTING MODAL */}
+      {showAddSettingModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="relative w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+                  <Database className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-white">Add Setting</h3>
+                  <p className="text-xs text-zinc-400">Add or override a key in `app_settings`</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAddSettingModal(false)}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddSetting} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                  Setting Key *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. GEMINI_MODEL or CUSTOM_FLAG"
+                  value={newSettingKey}
+                  onChange={(e) => setNewSettingKey(e.target.value.toUpperCase())}
+                  required
+                  className="w-full px-3 py-2 text-xs font-mono rounded-xl bg-zinc-900 border border-zinc-800 text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 shadow-inner"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                  Setting Value *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. gemini-2.0-flash or true"
+                  value={newSettingValue}
+                  onChange={(e) => setNewSettingValue(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 text-xs font-mono rounded-xl bg-zinc-900 border border-zinc-800 text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 shadow-inner"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                  Description
+                </label>
+                <input
+                  type="text"
+                  placeholder="Brief description of what this setting controls"
+                  value={newSettingDesc}
+                  onChange={(e) => setNewSettingDesc(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-zinc-900 border border-zinc-800 text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 shadow-inner"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-zinc-800 flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowAddSettingModal(false)}
+                  className="px-4 py-2 rounded-xl border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-medium transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isAddingSetting}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 shadow-lg shadow-indigo-600/20"
+                >
+                  {isAddingSetting ? (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-3.5 w-3.5" />
+                      <span>Save Setting</span>
+                    </>
                   )}
                 </button>
               </div>

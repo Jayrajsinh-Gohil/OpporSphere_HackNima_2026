@@ -33,6 +33,7 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 class SettingUpdateRequest(BaseModel):
     key: str
     value: str
+    description: Optional[str] = None
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
@@ -241,35 +242,62 @@ async def list_admin_students(
 @router.get("/settings", summary="Get runtime configuration settings")
 async def get_admin_settings(admin: AdminStudent):
     """Lists key-value runtime configuration settings."""
-    resp = supabase_admin.table("app_settings").select("*").execute()
+    resp = supabase_admin.table("app_settings").select("*").order("key").execute()
     return APIResponse(data=resp.data or [])
 
 
-@router.patch("/settings", summary="Update a runtime configuration setting")
+@router.patch("/settings", summary="Update or create a runtime configuration setting")
 async def update_admin_setting(
     body: SettingUpdateRequest,
     admin: AdminStudent,
 ):
-    """Updates live configuration (e.g. LLM_PROVIDER between 'gemini' and 'ollama')."""
+    """Updates or creates live configuration (e.g. LLM_PROVIDER between 'gemini' and 'ollama')."""
     try:
+        from datetime import datetime, timezone
+
+        update_payload: Dict[str, Any] = {
+            "key": body.key.strip(),
+            "value": body.value.strip(),
+            "updated_by": admin.email,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if body.description is not None:
+            update_payload["description"] = body.description.strip()
+
         resp = (
             supabase_admin.table("app_settings")
-            .update({
-                "value": body.value,
-                "updated_by": admin.email,
-            })
-            .eq("key", body.key)
+            .upsert(update_payload)
             .execute()
         )
         return APIResponse(
             data=resp.data,
-            message=f"Setting '{body.key}' updated to '{body.value}'.",
+            message=f"Setting '{body.key}' saved successfully.",
         )
     except Exception as exc:
         logger.error(f"Failed to update setting {body.key}: {exc}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update setting: {exc}",
+        )
+
+
+@router.delete("/settings/{key}", summary="Delete a runtime configuration setting")
+async def delete_admin_setting(
+    key: str,
+    admin: AdminStudent,
+):
+    """Deletes a runtime configuration setting from app_settings."""
+    try:
+        resp = supabase_admin.table("app_settings").delete().eq("key", key).execute()
+        return APIResponse(
+            data=resp.data,
+            message=f"Setting '{key}' deleted successfully.",
+        )
+    except Exception as exc:
+        logger.error(f"Failed to delete setting {key}: {exc}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete setting: {exc}",
         )
 
 
