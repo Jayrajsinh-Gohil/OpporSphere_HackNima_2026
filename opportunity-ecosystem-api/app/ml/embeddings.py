@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import asyncio
 from functools import lru_cache
-from typing import List
+from typing import Any, List, Optional
 
 import numpy as np
 from loguru import logger
@@ -75,7 +75,7 @@ class SentenceTransformerEmbedder:
         return [v.tolist() for v in vectors]
 
     @staticmethod
-    def cosine_similarity(a: Any, b: Any) -> float:
+    def cosine_similarity(a: Any, b: Any) -> float:  # type: ignore[override]
         """Quick cosine similarity between two 384-dim vectors."""
         import json
         if isinstance(a, str):

@@ -130,7 +130,11 @@ export default function AdminPage() {
     const checkAdmin = async () => {
       setIsVerifying(true);
       try {
-        const res = await api.admin.me();
+        // 10-second timeout — prevents "Verifying..." from hanging forever if backend is down
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Backend not reachable (timeout). Ensure the API server is running.")), 10000)
+        );
+        const res = await Promise.race([api.admin.me(), timeout]);
         if (res?.data?.is_admin) {
           setIsAdmin(true);
           setAdminProfile(res.data);

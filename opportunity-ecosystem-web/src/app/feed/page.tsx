@@ -208,49 +208,60 @@ export default function OpportunityFeedPage() {
     setErrorMsg(null);
 
     try {
-      const res = await api.match.getRecommendations(50, 0.0);
-      const data = res?.data;
+      // Try personalized AI recommendations first (with 15s timeout to prevent infinite spinner)
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Recommendations timeout")), 15000)
+      );
 
-      if (data && data.recommendations && data.recommendations.length > 0) {
-        setHasEmbedding(data.has_profile_embedding);
-        setOpportunities(data.recommendations);
-        return;
+      try {
+        const res = await Promise.race([
+          api.match.getRecommendations(50, 0.0),
+          timeoutPromise,
+        ]);
+        const data = res?.data;
+
+        if (data && data.recommendations && data.recommendations.length > 0) {
+          setHasEmbedding(data.has_profile_embedding);
+          setOpportunities(data.recommendations);
+          return; // Early return — setIsLoading is handled in the outer finally
+        }
+      } catch (err: unknown) {
+        console.info("Personalized recommendations unavailable, fetching all database opportunities:", err);
       }
-    } catch (err: unknown) {
-      console.info("Personalized recommendations unavailable, fetching all database opportunities:", err);
-    }
 
-    // Fallback: Fetch all 64 verified opportunities from the database
-    try {
-      const oppRes = await api.opportunities.list({ limit: 100 });
-      const rawList = Array.isArray(oppRes)
-        ? oppRes
-        : ((oppRes as { data?: unknown[] })?.data || []);
+      // Fallback: Fetch all 64 verified opportunities from the database
+      try {
+        const oppRes = await api.opportunities.list({ limit: 100 });
+        const rawList = Array.isArray(oppRes)
+          ? oppRes
+          : ((oppRes as { data?: unknown[] })?.data || []);
 
-      if (rawList && rawList.length > 0) {
-        const mapped: RecommendationItem[] = (rawList as any[]).map((op, idx) => ({
-          id: String(op.id),
-          title: op.title || "Opportunity",
-          description: op.description || "",
-          domain: op.domain ? (op.domain.charAt(0).toUpperCase() + op.domain.slice(1)) : "Technology",
-          type: op.type ? (op.type.charAt(0).toUpperCase() + op.type.slice(1)) : "Hackathon",
-          location: op.location || "India",
-          organizer: op.organizer || "Verified Organizer",
-          deadline: op.deadline || "Open",
-          trust_score: op.trust_score ?? 95,
-          similarity: 0.92 - (idx * 0.003),
-          match_relevance_pct: Math.max(65, Math.round((0.95 - (idx * 0.004)) * 100)),
-          is_fallback: false,
-          reason: `Verified ${op.type || "opportunity"} in ${op.domain || "Technology"} (${op.location || "India"}).`,
-        }));
-        setOpportunities(mapped);
-      } else {
+        if (rawList && rawList.length > 0) {
+          const mapped: RecommendationItem[] = (rawList as any[]).map((op, idx) => ({
+            id: String(op.id),
+            title: op.title || "Opportunity",
+            description: op.description || "",
+            domain: op.domain ? (op.domain.charAt(0).toUpperCase() + op.domain.slice(1)) : "Technology",
+            type: op.type ? (op.type.charAt(0).toUpperCase() + op.type.slice(1)) : "Hackathon",
+            location: op.location || "India",
+            organizer: op.organizer || "Verified Organizer",
+            deadline: op.deadline || "Open",
+            trust_score: op.trust_score ?? 95,
+            similarity: 0.92 - (idx * 0.003),
+            match_relevance_pct: Math.max(65, Math.round((0.95 - (idx * 0.004)) * 100)),
+            is_fallback: false,
+            reason: `Verified ${op.type || "opportunity"} in ${op.domain || "Technology"} (${op.location || "India"}).`,
+          }));
+          setOpportunities(mapped);
+        } else {
+          setOpportunities(DEFAULT_FALLBACK_RECOMMENDATIONS);
+        }
+      } catch (listErr) {
+        console.warn("Could not fetch database opportunities, using fallback:", listErr);
         setOpportunities(DEFAULT_FALLBACK_RECOMMENDATIONS);
       }
-    } catch (listErr) {
-      console.warn("Could not fetch database opportunities, using fallback:", listErr);
-      setOpportunities(DEFAULT_FALLBACK_RECOMMENDATIONS);
     } finally {
+      // Always stop the spinner — no matter which path was taken
       setIsLoading(false);
     }
   }, []);
