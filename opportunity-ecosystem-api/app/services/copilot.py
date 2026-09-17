@@ -25,17 +25,98 @@ from app.models.copilot import (
 )
 
 SYSTEM_INSTRUCTIONS = (
-    "You are a helpful assistant for a student opportunity platform. "
-    "Answer ONLY using the provided context. If unsure, say you don't have that information."
+    "You are Copilot, a friendly and helpful AI assistant for OpporSphere — a student opportunity platform. "
+    "Your job is to help students discover hackathons, internships, fellowships, workshops, and competitions. "
+    "When opportunity context is provided, base your answers on it and present details in a warm, conversational way. "
+    "Always be encouraging and student-friendly. Never just list raw IDs or technical fields — speak like a helpful human advisor. "
+    "For greetings and general questions not about specific opportunities, respond naturally and warmly. "
+    "If you genuinely don't know something, say so honestly and suggest what the student can ask you."
 )
 
 # Minimum cosine similarity threshold to consider retrieved context relevant
 MIN_RELEVANCE_THRESHOLD = 0.25
 
 FALLBACK_GUARD_MESSAGE = (
-    "I couldn't find any relevant opportunities or events in our database matching your request. "
-    "Please try asking about available hackathons, internships, workshops, or competitions!"
+    "I couldn't find any opportunities directly matching that query in our database right now. "
+    "Try asking about hackathons, internships, workshops, research fellowships, or competitions — "
+    "I can help you find the perfect opportunity! 🚀"
 )
+
+# Greeting/small-talk patterns — these bypass the RAG pipeline entirely
+_GREETING_PATTERNS = [
+    "hello", "hi", "hey", "howdy", "hiya", "good morning", "good afternoon",
+    "good evening", "good night", "greetings", "sup", "what's up", "wassup",
+    "thanks", "thank you", "thank u", "thx", "ty", "great", "awesome",
+    "nice", "cool", "ok", "okay", "got it", "understood", "bye", "goodbye",
+    "see you", "later", "how are you", "how r u", "how do you do",
+    "who are you", "what are you", "what can you do", "help", "start",
+]
+
+_GREETING_RESPONSES = [
+    (
+        "👋 Hey there! I'm your OpporSphere Copilot — your personal guide to finding the best "
+        "student opportunities! I can help you discover hackathons, internships, research fellowships, "
+        "workshops, and competitions. \n\n"
+        "Try asking me things like:\n"
+        "• *What hackathons are available for CS students in India?*\n"
+        "• *Are there any paid AI internships with open deadlines?*\n"
+        "• *Which opportunities have cash prizes?*\n\n"
+        "What are you looking for? 🚀"
+    ),
+    (
+        "Hello! 😊 Great to have you here. I'm Copilot — think of me as your smart assistant "
+        "for navigating student opportunities. Ask me about hackathons, internships, scholarships, "
+        "or anything opportunity-related and I'll search our verified database for you!"
+    ),
+]
+
+
+def _is_greeting_or_smalltalk(message: str) -> bool:
+    """Returns True if the message is a simple greeting or small-talk phrase."""
+    cleaned = message.lower().strip().rstrip("!?.")
+    # Direct match
+    if cleaned in _GREETING_PATTERNS:
+        return True
+    # Short messages that start with a greeting word
+    words = cleaned.split()
+    if len(words) <= 4 and words[0] in _GREETING_PATTERNS:
+        return True
+    return False
+
+
+def _greeting_response(message: str) -> str:
+    """Generate a contextual greeting response."""
+    msg = message.lower()
+    if any(w in msg for w in ["thanks", "thank", "thx", "ty"]):
+        return (
+            "You're welcome! 😊 Feel free to ask me anything about upcoming opportunities — "
+            "hackathons, internships, fellowships, and more. I'm here to help!"
+        )
+    if any(w in msg for w in ["bye", "goodbye", "see you", "later"]):
+        return (
+            "Goodbye! 👋 Good luck with your applications — come back anytime to explore "
+            "more opportunities on OpporSphere!"
+        )
+    if any(w in msg for w in ["who are you", "what are you", "what can you do", "help"]):
+        return (
+            "I'm **Copilot** — your AI assistant for finding student opportunities on OpporSphere! 🤖\n\n"
+            "Here's what I can help you with:\n"
+            "• 🏆 **Hackathons** — Find upcoming hack events by domain, location, or prize pool\n"
+            "• 💼 **Internships** — Discover paid and research internship openings\n"
+            "• 🎓 **Fellowships & Scholarships** — Explore funding opportunities\n"
+            "• 🔬 **Workshops & Bootcamps** — Find skill-building events\n"
+            "• ⏰ **Deadlines** — Get deadline reminders for any opportunity\n\n"
+            "Just ask me anything in plain English!"
+        )
+    if any(w in msg for w in ["how are you", "how r u", "how do you do"]):
+        return (
+            "I'm doing great, thanks for asking! 😄 Ready to help you find amazing opportunities. "
+            "What kind of opportunity are you looking for today?"
+        )
+    # Generic greeting
+    import random
+    return random.choice(_GREETING_RESPONSES)
+
 
 # In-memory session store: session_id -> list of message dicts [{"role": ..., "content": ...}]
 _SESSION_STORE: Dict[str, List[Dict[str, str]]] = {}
@@ -164,31 +245,44 @@ def build_copilot_prompt(
     retrieved_records: List[Dict[str, Any]],
     history: List[Dict[str, str]],
 ) -> str:
-    """Constructs the prompt containing retrieved context, conversation history, and user question."""
+    """Constructs a clean, conversational prompt with opportunity context."""
     context_blocks = []
     for i, rec in enumerate(retrieved_records, 1):
-        block = [
-            f"[Opportunity {i}]",
-            f"ID: {rec.get('id')}",
-            f"Title: {rec.get('title', 'Unknown')}",
-            f"Type: {rec.get('type', 'N/A')} | Domain: {rec.get('domain', 'N/A')}",
-            f"Location: {rec.get('location', 'Online / Unspecified')}",
-            f"Organizer: {rec.get('organizer', 'N/A')}",
-            f"Deadline: {rec.get('deadline', 'Open')}",
-            f"Description: {rec.get('description', 'No description provided.')}",
-        ]
-        if rec.get("eligibility"):
-            block.append(f"Eligibility: {rec['eligibility']}")
+        title = rec.get('title', 'Unknown Opportunity')
+        opp_type = str(rec.get('type', 'Opportunity')).capitalize()
+        domain = rec.get('domain', 'Technology')
+        location = rec.get('location', 'Online')
+        organizer = rec.get('organizer', '')
+        deadline = rec.get('deadline', 'Open / No deadline listed')
+        description = rec.get('description', '')[:200].strip()
+        eligibility = rec.get('eligibility', '')
+
+        lines = [f"Opportunity {i}: {title}"]
+        lines.append(f"  Type: {opp_type} | Domain: {domain}")
+        if organizer:
+            lines.append(f"  Organiser: {organizer}")
+        lines.append(f"  Location: {location}")
+        lines.append(f"  Application Deadline: {deadline}")
+        if description:
+            lines.append(f"  About: {description}")
+        if eligibility:
+            lines.append(f"  Eligibility: {eligibility}")
 
         events = rec.get("events") or []
-        if events:
-            event_strs = []
-            for ev in events:
-                details = ev.get("extra_details") or {}
-                event_strs.append(f"Status: {ev.get('status')} | Extra: {details}")
-            block.append(f"Events: {'; '.join(event_strs)}")
+        for ev in events[:2]:
+            details = ev.get("extra_details") or {}
+            ev_status = ev.get("status", "")
+            if ev_status or details:
+                ev_str = f"  Event Status: {ev_status}"
+                if details.get("prize_pool"):
+                    ev_str += f" | Prize Pool: {details['prize_pool']}"
+                if details.get("max_team_size"):
+                    ev_str += f" | Max Team Size: {details['max_team_size']}"
+                if details.get("format"):
+                    ev_str += f" | Format: {details['format']}"
+                lines.append(ev_str)
 
-        context_blocks.append("\n".join(block))
+        context_blocks.append("\n".join(lines))
 
     context_str = "\n\n".join(context_blocks)
 
@@ -201,15 +295,17 @@ def build_copilot_prompt(
         history_str = "\n".join(history_lines) + "\n\n"
 
     prompt = (
-        f"CONTEXT INFORMATION:\n"
-        f"---------------------\n"
+        f"VERIFIED OPPORTUNITY DATABASE CONTEXT:\n"
+        f"--------------------------------------\n"
         f"{context_str}\n"
-        f"---------------------\n\n"
+        f"--------------------------------------\n\n"
         f"{history_str}"
         f"Student: {user_message}\n\n"
-        f"Copilot:"
+        f"Copilot (respond conversationally, be warm and helpful, highlight the most relevant opportunity "
+        f"first, mention deadline and eligibility naturally — do NOT show raw IDs or technical field names):"
     )
     return prompt
+
 
 
 async def _generate_llm_response(prompt: str) -> str:
@@ -255,20 +351,33 @@ def _synthesize_grounded_fallback(
 async def chat(request: CopilotChatRequest) -> CopilotChatResponse:
     """
     RAG conversational flow:
+      0. Greeting / small-talk detection — bypass RAG for conversational messages.
       1. Embed user query and retrieve top-5 relevant opportunities.
-      2. Guard check: if retrieval finds nothing relevant, return safe fallback.
-      3. Construct prompt with system instructions, retrieved context, and last 3 turns of history.
-      4. Call local Ollama LLM to draft answer.
+      2. Guard check: if retrieval finds nothing relevant, return friendly fallback.
+      3. Construct prompt with system instructions, retrieved context, and last 3 turns.
+      4. Call active LLM (Gemini or Ollama) to generate response.
       5. Update session history and return answer with source citations.
     """
     clean_message = request.message.strip()
     if not clean_message:
         raise ValueError("Message cannot be empty.")
 
+    # 0. Handle greetings and small-talk without hitting the RAG pipeline
+    if _is_greeting_or_smalltalk(clean_message):
+        reply = _greeting_response(clean_message)
+        append_session_turn(request.session_id, clean_message, reply)
+        return CopilotChatResponse(
+            session_id=request.session_id,
+            answer=reply,
+            source_opportunity_ids=[],
+            sources=[],
+            retrieval_guard_triggered=False,
+        )
+
     # 1. Retrieve top-5 relevant opportunities from Supabase
     records, is_relevant = await retrieve_grounding_opportunities(clean_message, top_k=5)
 
-    # 2. Guard Check: If retrieval returned nothing relevant, do not hallucinate
+    # 2. Guard Check: If retrieval returned nothing relevant, return friendly fallback
     if not is_relevant or not records:
         logger.info(f"Guard triggered for session {request.session_id}. Returning safe fallback.")
         append_session_turn(request.session_id, clean_message, FALLBACK_GUARD_MESSAGE)

@@ -31,11 +31,63 @@ interface ChatMessage {
 }
 
 const STARTER_PROMPTS = [
+  "Hello! What can you help me with?",
   "What upcoming hackathons are available for CS students in India?",
   "Are there any paid research fellowships or internships in Generative AI?",
   "Which competitions have upcoming deadlines and cash prizes?",
-  "Tell me about open source web development opportunities.",
 ];
+
+// Lightweight markdown renderer — handles **bold**, *italic*, bullet lists
+function renderMarkdown(text: string): React.ReactNode[] {
+  const lines = text.split("\n");
+  return lines.map((line, lineIdx) => {
+    // Bullet lines: lines starting with •, -, or *
+    const bulletMatch = line.match(/^(\s*)([•\-\*])\s+(.*)/);
+    if (bulletMatch) {
+      const content = bulletMatch[3];
+      return (
+        <div key={lineIdx} className="flex items-start gap-2 py-0.5">
+          <span className="text-pink-400 mt-0.5 shrink-0">•</span>
+          <span>{renderInline(content)}</span>
+        </div>
+      );
+    }
+    // Empty line — spacer
+    if (line.trim() === "") {
+      return <div key={lineIdx} className="h-1" />;
+    }
+    // Normal line
+    return <div key={lineIdx}>{renderInline(line)}</div>;
+  });
+}
+
+// Renders inline markdown: **bold**, *italic*
+function renderInline(text: string): React.ReactNode {
+  const parts: React.ReactNode[] = [];
+  // Split on **bold** and *italic* patterns
+  const regex = /(\*\*([^*]+)\*\*|\*([^*]+)\*)/g;
+  let lastIndex = 0;
+  let match;
+  let key = 0;
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(<span key={key++}>{text.slice(lastIndex, match.index)}</span>);
+    }
+    if (match[2]) {
+      // **bold**
+      parts.push(<strong key={key++} className="font-semibold text-white">{match[2]}</strong>);
+    } else if (match[3]) {
+      // *italic*
+      parts.push(<em key={key++} className="italic text-zinc-300">{match[3]}</em>);
+    }
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    parts.push(<span key={key++}>{text.slice(lastIndex)}</span>);
+  }
+  return parts.length > 0 ? <>{parts}</> : text;
+}
+
 
 export default function CopilotPage() {
   const [sessionId, setSessionId] = useState<string>("");
@@ -256,7 +308,12 @@ export default function CopilotPage() {
                         : "bg-zinc-900/90 border border-zinc-800 text-zinc-200 rounded-tl-none"
                     }`}
                   >
-                    <p className="whitespace-pre-wrap">{msg.text}</p>
+                    <div className="space-y-0.5 leading-relaxed">
+                      {msg.sender === "assistant"
+                        ? renderMarkdown(msg.text)
+                        : <p className="whitespace-pre-wrap">{msg.text}</p>
+                      }
+                    </div>
 
                     {/* Source Citations */}
                     {msg.sources && msg.sources.length > 0 && (
@@ -296,7 +353,7 @@ export default function CopilotPage() {
                   </div>
                   <div className="p-3.5 rounded-2xl bg-zinc-900 border border-zinc-800 text-xs text-zinc-400 flex items-center gap-2">
                     <RefreshCw className="h-3.5 w-3.5 animate-spin text-pink-400" />
-                    <span>Searching database and grounding response...</span>
+                    <span>Thinking and searching opportunities...</span>
                   </div>
                 </div>
               )}
